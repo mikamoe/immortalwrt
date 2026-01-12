@@ -1,4 +1,4 @@
-name: Build luci-theme-design (js)
+name: Build luci-theme-design (js) for MT798x Filogic
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
 jobs:
   build-theme:
     runs-on: ubuntu-latest
+
     env:
       MAKEFLAGS: -j$(nproc)
       THEME_REPO: https://github.com/0x676e67/luci-theme-design.git
@@ -13,22 +14,34 @@ jobs:
       THEME_DIR: package/luci-theme-design
 
     steps:
-      - name: Checkout ImmortalWrt Source
+      - name: Checkout ImmortalWrt source
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          # use your fork branch
           ref: openwrt-24.10
+          fetch-depth: 0
 
-      - name: Install Build Dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ccache libncurses5-dev libssl-dev git wget python3-distutils
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ccache \
+            git \
+            wget \
+            curl \
+            unzip \
+            rsync \
+            gawk \
+            gettext \
+            libncurses5-dev \
+            libssl-dev \
+            python3 \
+            python3-setuptools
 
       - name: Setup ccache
         run: |
           mkdir -p ~/.ccache
-          echo "max_size = 2.0G" > ~/.ccache/ccache.conf
+          echo "max_size = 2G" > ~/.ccache/ccache.conf
 
       - name: Cache dl and ccache
         uses: actions/cache@v4
@@ -36,35 +49,42 @@ jobs:
           path: |
             dl
             ~/.ccache
-          key: ${{ runner.os }}-openwrt-dl-${{ github.ref }}
+          key: ${{ runner.os }}-openwrt-mediatek-filogic
           restore-keys: |
-            ${{ runner.os }}-openwrt-dl-
+            ${{ runner.os }}-openwrt-
 
-      - name: Clone luci-theme-design js branch
+      - name: Clone luci-theme-design (js branch)
         run: |
           git clone --depth 1 -b $THEME_BRANCH $THEME_REPO $THEME_DIR
 
-      - name: Update feeds
+      - name: Update and install feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Generate minimal config
+      - name: Generate .config for Cudy TR3000 (MT798x)
         run: |
-          make defconfig
-          # enable theme only
-          echo "CONFIG_PACKAGE_luci=y" >> .config
-          echo "CONFIG_PACKAGE_luci-base=y" >> .config
-          echo "CONFIG_PACKAGE_luci-theme-design=y" >> .config
+          cat > .config << 'EOF'
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3000_256m_v1=y
+
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-base=y
+          CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-theme-design=y
+          EOF
+
           make defconfig
 
-      - name: Compile theme package
+      - name: Compile luci-theme-design only
         run: |
           make package/luci-theme-design/compile V=s
 
-      - name: Upload artifacts
+      - name: Upload ipk artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: luci-theme-design-ipk
+          name: luci-theme-design-ipk-mt798x
           path: |
-            bin/**/*.ipk
+            bin/targets/mediatek/filogic/packages/*.ipk
+            bin/packages/*/luci-theme-design*.ipk
